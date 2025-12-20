@@ -66,10 +66,13 @@ function Get-FileHashRecursive {
         if ($PSVersionTable.PSVersion.Major -ge 7) {
             Write-Host "Using PowerShell 7+ parallel processing" -ForegroundColor Green
 
+            # Add index to files for progress tracking
+            $filesWithIndex = $files | Select-Object *, @{Name='Index';Expression={$files.IndexOf($_) + 1}}
+
             # Use ForEach-Object -Parallel for PowerShell 7+
-            $results = $files | ForEach-Object -Parallel {
+            $results = $filesWithIndex | ForEach-Object -Parallel {
                 $file = $_
-                $fileNum = $using:files.IndexOf($file) + 1
+                $fileNum = $file.Index
                 $total = $using:totalFiles
 
                 try {
