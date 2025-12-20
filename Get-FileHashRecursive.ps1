@@ -1,12 +1,12 @@
 <#
 .SYNOPSIS
-    Recursively scans files in a selected directory and computes SHA-256 hashes.
+    Recursively scans files in a selected directory and computes SHA-256 hashes using multi-threading.
 
 .DESCRIPTION
     This script opens a folder selection dialog (defaulting to the Documents folder),
     then recursively scans all files in the selected directory and subdirectories,
-    computing the SHA-256 hash for each file. Results are displayed and optionally
-    exported to a CSV file.
+    computing the SHA-256 hash for each file using multi-threading based on CPU cores.
+    Identifies duplicate files and exports results to a CSV file.
 
 .EXAMPLE
     .\Get-FileHashRecursive.ps1
@@ -14,7 +14,8 @@
 
 .NOTES
     Author: UsefulWindowsScripts
-    Requires: PowerShell 3.0 or later
+    Requires: PowerShell 7.0 or later (for parallel processing)
+    For PowerShell 5.1, falls back to single-threaded processing
 #>
 
 # Add required assemblies for folder browser dialog
@@ -38,7 +39,7 @@ function Select-Folder {
     return $null
 }
 
-# Function to compute SHA-256 hash for files recursively
+# Function to compute SHA-256 hash for files recursively with multi-threading
 function Get-FileHashRecursive {
     param(
         [Parameter(Mandatory=$true)]
@@ -49,10 +50,10 @@ function Get-FileHashRecursive {
     Write-Host "Computing SHA-256 hashes for all files..." -ForegroundColor Cyan
     Write-Host ("-" * 80) -ForegroundColor Gray
 
-    # Initialize counters
-    $fileCount = 0
-    $errorCount = 0
-    $results = @()
+    # Get CPU thread count
+    $cpuThreads = (Get-CimInstance Win32_ComputerSystem).NumberOfLogicalProcessors
+    Write-Host "Detected CPU threads: $cpuThreads" -ForegroundColor Yellow
+    Write-Host "Using parallel processing with $cpuThreads threads`n" -ForegroundColor Yellow
 
     # Get all files recursively
     try {
@@ -61,67 +62,183 @@ function Get-FileHashRecursive {
 
         Write-Host "Found $totalFiles files to process`n" -ForegroundColor Yellow
 
-        foreach ($file in $files) {
-            $fileCount++
+        # Check PowerShell version for parallel support
+        if ($PSVersionTable.PSVersion.Major -ge 7) {
+            Write-Host "Using PowerShell 7+ parallel processing" -ForegroundColor Green
 
-            # Show progress
-            if ($fileCount % 10 -eq 0 -or $fileCount -eq 1) {
-                Write-Progress -Activity "Computing file hashes" `
-                    -Status "Processing file $fileCount of $totalFiles" `
-                    -PercentComplete (($fileCount / $totalFiles) * 100)
-            }
+            # Use ForEach-Object -Parallel for PowerShell 7+
+            $results = $files | ForEach-Object -Parallel {
+                $file = $_
+                $fileNum = $using:files.IndexOf($file) + 1
+                $total = $using:totalFiles
 
-            try {
-                # Compute SHA-256 hash
-                $hash = Get-FileHash -Path $file.FullName -Algorithm SHA256 -ErrorAction Stop
+                try {
+                    # Compute SHA-256 hash
+                    $hash = Get-FileHash -Path $file.FullName -Algorithm SHA256 -ErrorAction Stop
 
-                # Create result object
-                $result = [PSCustomObject]@{
-                    FileName = $file.Name
-                    FilePath = $file.FullName
-                    SHA256 = $hash.Hash
-                    SizeBytes = $file.Length
-                    SizeMB = [math]::Round($file.Length / 1MB, 2)
-                    LastModified = $file.LastWriteTime
+                    # Get file extension
+                    $extension = $file.Extension
+                    if ([string]::IsNullOrEmpty($extension)) {
+                        $extension = "(none)"
+                    }
+
+                    # Create result object
+                    $result = [PSCustomObject]@{
+                        FileName = $file.Name
+                        FileExtension = $extension
+                        FilePath = $file.FullName
+                        SHA256 = $hash.Hash
+                        SizeBytes = $file.Length
+                        SizeMB = [math]::Round($file.Length / 1MB, 2)
+                        LastModified = $file.LastWriteTime
+                        Status = "Success"
+                        Error = ""
+                    }
+
+                    # Display progress for first 20 files
+                    if ($fileNum -le 20) {
+                        Write-Host "[$fileNum/$total] $($file.Name)" -ForegroundColor Green
+                        Write-Host "  Hash: $($hash.Hash)" -ForegroundColor White
+                        Write-Host "  Extension: $extension" -ForegroundColor Gray
+                        Write-Host "  Path: $($file.FullName)" -ForegroundColor Gray
+                        Write-Host ""
+                    } elseif ($fileNum % 50 -eq 0) {
+                        Write-Host "Progress: $fileNum/$total files processed..." -ForegroundColor Cyan
+                    }
+
+                    return $result
+
+                } catch {
+                    Write-Host "ERROR processing: $($file.FullName)" -ForegroundColor Red
+
+                    # Return error result
+                    return [PSCustomObject]@{
+                        FileName = $file.Name
+                        FileExtension = $file.Extension
+                        FilePath = $file.FullName
+                        SHA256 = "ERROR"
+                        SizeBytes = $file.Length
+                        SizeMB = [math]::Round($file.Length / 1MB, 2)
+                        LastModified = $file.LastWriteTime
+                        Status = "Error"
+                        Error = $_.Exception.Message
+                    }
+                }
+            } -ThrottleLimit $cpuThreads
+
+        } else {
+            Write-Host "Using PowerShell 5.1 single-threaded processing" -ForegroundColor Yellow
+            Write-Host "(Upgrade to PowerShell 7+ for multi-threading support)`n" -ForegroundColor Yellow
+
+            # Fallback to single-threaded for PowerShell 5.1
+            $results = @()
+            $fileCount = 0
+
+            foreach ($file in $files) {
+                $fileCount++
+
+                # Show progress
+                if ($fileCount % 10 -eq 0 -or $fileCount -eq 1) {
+                    Write-Progress -Activity "Computing file hashes" `
+                        -Status "Processing file $fileCount of $totalFiles" `
+                        -PercentComplete (($fileCount / $totalFiles) * 100)
                 }
 
-                $results += $result
+                try {
+                    # Compute SHA-256 hash
+                    $hash = Get-FileHash -Path $file.FullName -Algorithm SHA256 -ErrorAction Stop
 
-                # Display progress for first few files
-                if ($fileCount -le 5) {
-                    Write-Host "[$fileCount/$totalFiles] $($file.Name)" -ForegroundColor Green
-                    Write-Host "  Hash: $($hash.Hash)" -ForegroundColor White
-                    Write-Host "  Path: $($file.FullName)" -ForegroundColor Gray
-                    Write-Host ""
+                    # Get file extension
+                    $extension = $file.Extension
+                    if ([string]::IsNullOrEmpty($extension)) {
+                        $extension = "(none)"
+                    }
+
+                    # Create result object
+                    $result = [PSCustomObject]@{
+                        FileName = $file.Name
+                        FileExtension = $extension
+                        FilePath = $file.FullName
+                        SHA256 = $hash.Hash
+                        SizeBytes = $file.Length
+                        SizeMB = [math]::Round($file.Length / 1MB, 2)
+                        LastModified = $file.LastWriteTime
+                        Status = "Success"
+                        Error = ""
+                    }
+
+                    $results += $result
+
+                    # Display progress for first 20 files
+                    if ($fileCount -le 20) {
+                        Write-Host "[$fileCount/$totalFiles] $($file.Name)" -ForegroundColor Green
+                        Write-Host "  Hash: $($hash.Hash)" -ForegroundColor White
+                        Write-Host "  Extension: $extension" -ForegroundColor Gray
+                        Write-Host "  Path: $($file.FullName)" -ForegroundColor Gray
+                        Write-Host ""
+                    }
+
+                } catch {
+                    Write-Host "ERROR processing: $($file.FullName)" -ForegroundColor Red
+                    Write-Host "  $($_.Exception.Message)" -ForegroundColor Red
                 }
-
-            } catch {
-                $errorCount++
-                Write-Host "ERROR processing: $($file.FullName)" -ForegroundColor Red
-                Write-Host "  $($_.Exception.Message)" -ForegroundColor Red
             }
+
+            Write-Progress -Activity "Computing file hashes" -Completed
         }
 
-        Write-Progress -Activity "Computing file hashes" -Completed
+        # Filter out successful results
+        $successfulResults = $results | Where-Object { $_.Status -eq "Success" }
+        $errorCount = ($results | Where-Object { $_.Status -eq "Error" }).Count
+
+        # Display summary
+        Write-Host ("-" * 80) -ForegroundColor Gray
+        Write-Host "`nHash computation completed!" -ForegroundColor Green
+        Write-Host "Total files processed: $totalFiles" -ForegroundColor White
+        Write-Host "Successful: $($successfulResults.Count)" -ForegroundColor Green
+        Write-Host "Errors: $errorCount" -ForegroundColor $(if ($errorCount -gt 0) { "Red" } else { "Green" })
+
+        # Detect duplicates
+        Write-Host "`nAnalyzing for duplicate files..." -ForegroundColor Cyan
+
+        $hashGroups = $successfulResults | Group-Object -Property SHA256
+        $duplicateGroups = $hashGroups | Where-Object { $_.Count -gt 1 }
+        $duplicateCount = ($duplicateGroups | ForEach-Object { $_.Count } | Measure-Object -Sum).Sum
+
+        Write-Host "Found $($duplicateGroups.Count) groups of duplicate files" -ForegroundColor Yellow
+        Write-Host "Total duplicate files: $duplicateCount" -ForegroundColor Yellow
+
+        # Add duplicate detection fields
+        $groupId = 0
+        $finalResults = foreach ($result in $successfulResults) {
+            $duplicateGroup = $duplicateGroups | Where-Object { $_.Name -eq $result.SHA256 }
+
+            if ($duplicateGroup) {
+                # This file is a duplicate
+                $groupId++
+                $result | Add-Member -MemberType NoteProperty -Name "DuplicatesExist" -Value $true -Force
+                $result | Add-Member -MemberType NoteProperty -Name "DuplicateGroup" -Value $groupId -Force
+            } else {
+                # This file is unique
+                $result | Add-Member -MemberType NoteProperty -Name "DuplicatesExist" -Value $false -Force
+                $result | Add-Member -MemberType NoteProperty -Name "DuplicateGroup" -Value 0 -Force
+            }
+
+            # Remove Status and Error fields from final output
+            $result | Select-Object FileName, FileExtension, FilePath, SHA256, SizeBytes, SizeMB, LastModified, DuplicatesExist, DuplicateGroup
+        }
+
+        return $finalResults
 
     } catch {
         Write-Host "ERROR: Failed to scan directory - $($_.Exception.Message)" -ForegroundColor Red
         return $null
     }
-
-    # Display summary
-    Write-Host ("-" * 80) -ForegroundColor Gray
-    Write-Host "`nScan completed!" -ForegroundColor Green
-    Write-Host "Total files processed: $fileCount" -ForegroundColor White
-    Write-Host "Successful: $($fileCount - $errorCount)" -ForegroundColor Green
-    Write-Host "Errors: $errorCount" -ForegroundColor $(if ($errorCount -gt 0) { "Red" } else { "Green" })
-
-    return $results
 }
 
 # Main script execution
 try {
-    Write-Host "`n=== Recursive File Hash Scanner ===" -ForegroundColor Cyan
+    Write-Host "`n=== Recursive File Hash Scanner (Multi-Threaded) ===" -ForegroundColor Cyan
     Write-Host "This script will compute SHA-256 hashes for all files in a selected directory.`n" -ForegroundColor White
 
     # Show folder selection dialog
@@ -159,8 +276,17 @@ try {
             $hashResults | Export-Csv -Path $exportPath -NoTypeInformation -Encoding UTF8
             Write-Host "`nResults exported to: $exportPath" -ForegroundColor Green
 
+            # Display duplicate file statistics
+            $duplicates = $hashResults | Where-Object { $_.DuplicatesExist -eq $true }
+            if ($duplicates.Count -gt 0) {
+                Write-Host "`nDuplicate File Summary:" -ForegroundColor Yellow
+                Write-Host "  Total duplicate files: $($duplicates.Count)" -ForegroundColor White
+                Write-Host "  Duplicate groups: $(($duplicates | Select-Object -Unique DuplicateGroup).Count)" -ForegroundColor White
+                Write-Host "  TIP: Filter CSV by 'DuplicatesExist=TRUE' to see all duplicates" -ForegroundColor Cyan
+            }
+
             # Open the CSV file
-            Write-Host "Opening CSV file..." -ForegroundColor Cyan
+            Write-Host "`nOpening CSV file..." -ForegroundColor Cyan
             Start-Process $exportPath
 
         } catch {
@@ -169,8 +295,15 @@ try {
     }
 
     # Display sample of results
-    Write-Host "`n=== Sample Results (first 10 files) ===" -ForegroundColor Cyan
-    $hashResults | Select-Object -First 10 | Format-Table -AutoSize FileName, SHA256, SizeMB, LastModified
+    Write-Host "`n=== Sample Results (first 20 files) ===" -ForegroundColor Cyan
+    $hashResults | Select-Object -First 20 | Format-Table -AutoSize FileName, FileExtension, SHA256, SizeMB, DuplicatesExist
+
+    # Show duplicate examples if any exist
+    $duplicateFiles = $hashResults | Where-Object { $_.DuplicatesExist -eq $true } | Select-Object -First 10
+    if ($duplicateFiles.Count -gt 0) {
+        Write-Host "`n=== Duplicate Files Detected (first 10) ===" -ForegroundColor Yellow
+        $duplicateFiles | Format-Table -AutoSize FileName, FileExtension, DuplicateGroup, SHA256
+    }
 
     Write-Host "`nScript completed successfully!" -ForegroundColor Green
 
