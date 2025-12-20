@@ -103,17 +103,24 @@ $startTime = Get-Date
 # Thread-safe collections for results and errors
 $results = [System.Collections.Concurrent.ConcurrentBag[PSObject]]::new()
 $errors = [System.Collections.Concurrent.ConcurrentBag[PSObject]]::new()
-$processedCount = [System.Threading.Interlocked]::new()
 
 # Process files with multi-threading
 if ($PSVersion -ge 7) {
     # PowerShell 7+ - Use ForEach-Object -Parallel
     Write-Host "Using PowerShell 7+ parallel processing" -ForegroundColor Gray
+    Write-Host ""
+
+    # Synchronized hashtable for progress tracking
+    $sync = [hashtable]::Synchronized(@{
+        Counter = 0
+        CurrentFile = ""
+    })
 
     $allFiles | ForEach-Object -ThrottleLimit $threadCount -Parallel {
         $file = $_
         $results = $using:results
         $errors = $using:errors
+        $sync = $using:sync
         $totalFiles = $using:totalFiles
         $startTime = $using:startTime
 
@@ -144,11 +151,18 @@ if ($PSVersion -ge 7) {
             $results.Add($resultObj)
 
             # Update progress
-            $current = [System.Threading.Interlocked]::Increment([ref]$script:processedCount)
+            $sync.Counter++
+            $sync.CurrentFile = $file.Name
+            $current = $sync.Counter
             $elapsed = (Get-Date) - $startTime
             $percentComplete = [math]::Round(($current / $totalFiles) * 100, 2)
 
-            Write-Host "`r[Progress: $current/$totalFiles ($percentComplete%) | Elapsed: $($elapsed.ToString('hh\:mm\:ss'))] Processing: $($file.Name.PadRight(50).Substring(0,50))" -NoNewline
+            $fileName = $file.Name
+            if ($fileName.Length -gt 50) {
+                $fileName = $fileName.Substring(0, 47) + "..."
+            }
+
+            Write-Host "`r[Progress: $current/$totalFiles ($percentComplete%) | Elapsed: $($elapsed.ToString('hh\:mm\:ss'))] Processing: $($fileName.PadRight(50))" -NoNewline
         }
         catch {
             $errorObj = [PSCustomObject]@{
@@ -157,7 +171,8 @@ if ($PSVersion -ge 7) {
             }
             $errors.Add($errorObj)
 
-            $current = [System.Threading.Interlocked]::Increment([ref]$script:processedCount)
+            # Update counter even on error
+            $sync.Counter++
         }
     }
 }
