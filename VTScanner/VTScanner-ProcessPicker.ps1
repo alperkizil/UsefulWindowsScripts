@@ -1,9 +1,9 @@
 <#
 .SYNOPSIS
-    VTScanner process picker — Task-Manager-style list of running processes; pick one
+    VTScanner process picker - Task-Manager-style list of running processes; pick one
     and scan its executable on VirusTotal.
 .DESCRIPTION
-    Launched from the Start Menu shortcut "VTScanner — Scan Running Process".
+    Launched from the Start Menu shortcut "VTScanner - Scan Running Process".
     The shortcut requests elevation so we can read paths of elevated processes.
     Dot-sources VTScanner.ps1 so the scan/cache/log/UI logic lives in one place.
 #>
@@ -44,7 +44,7 @@ function Get-VTProcessRows {
 }
 
 $form = New-Object System.Windows.Forms.Form
-$form.Text = 'VTScanner — Scan Running Process'
+$form.Text = 'VTScanner - Scan Running Process'
 $form.Size = New-Object System.Drawing.Size(900, 560)
 $form.StartPosition = 'CenterScreen'
 $form.MinimumSize   = New-Object System.Drawing.Size(700, 400)

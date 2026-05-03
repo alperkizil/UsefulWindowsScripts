@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Builds VTScanner-Setup.exe — a single-file, self-contained installer.
+    Builds VTScanner-Setup.exe - a single-file, self-contained installer.
 .DESCRIPTION
     Run this script ONCE on a Windows box to produce VTScanner-Setup.exe.
     The output .exe contains every VTScanner script embedded inside a CAB.
@@ -9,7 +9,7 @@
     rest of the install).
 
     Built with IExpress (iexpress.exe), which ships with every Windows
-    install — no third-party tooling required.
+    install - no third-party tooling required.
 
 .PARAMETER OutputPath
     Where to write VTScanner-Setup.exe. Defaults to the parent of this script.
