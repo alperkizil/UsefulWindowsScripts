@@ -3,6 +3,16 @@ A collection of useful PowerShell scripts for Windows system administration and 
 
 ## Scripts
 
+### VTScanner
+
+A right-click VirusTotal scanner for Windows 10. Hashes any file with SHA-256,
+looks the hash up on VirusTotal, and shows the detection ratio in a small
+results window with a toast notification. Also includes a Task-Manager-style
+process picker so you can scan the executable behind any running process.
+
+See [`VTScanner/README.md`](VTScanner/README.md) for install steps, usage, and
+caveats.
+
 ### ReportFileSignatures.ps1
 
 A high-performance PowerShell script that recursively scans directories, calculates SHA-256 file signatures, detects duplicates, and generates comprehensive CSV reports.
