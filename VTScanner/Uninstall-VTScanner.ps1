@@ -26,9 +26,15 @@ function Test-IsElevated {
 
 if (-not (Test-IsElevated)) {
     Write-Host 'Re-launching elevated...'
-    $args = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $PSCommandPath)
-    if ($Purge) { $args += '-Purge' }
-    Start-Process -FilePath 'powershell.exe' -Verb RunAs -ArgumentList $args
+    $childArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $PSCommandPath)
+    if ($Purge) { $childArgs += '-Purge' }
+    try {
+        Start-Process -FilePath 'powershell.exe' -Verb RunAs -Wait -ArgumentList $childArgs
+    } catch {
+        [System.Windows.Forms.MessageBox]::Show(
+            "Uninstall cancelled — elevation was denied or failed:`n$($_.Exception.Message)",
+            'VTScanner', 'OK', 'Warning') | Out-Null
+    }
     return
 }
 
