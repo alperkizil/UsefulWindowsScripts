@@ -43,16 +43,18 @@ $confirm = [System.Windows.Forms.MessageBox]::Show(
     'VTScanner uninstall', 'YesNo', 'Question')
 if ($confirm -ne 'Yes') { return }
 
-$ctxKey = 'HKLM:\SOFTWARE\Classes\*\shell\VTScan'
-if (Test-Path $ctxKey) {
-    Remove-Item -Path $ctxKey -Recurse -Force
-    Write-Host "Removed $ctxKey"
+try {
+    [Microsoft.Win32.Registry]::LocalMachine.DeleteSubKeyTree('SOFTWARE\Classes\*\shell\VTScan', $false)
+    Write-Host 'Removed HKLM\SOFTWARE\Classes\*\shell\VTScan'
+} catch {
+    Write-Warning "Could not remove right-click key: $($_.Exception.Message)"
 }
 
-$aumidKey = "HKCU:\Software\Classes\AppUserModelId\$aumid"
-if (Test-Path $aumidKey) {
-    Remove-Item -Path $aumidKey -Recurse -Force
-    Write-Host "Removed $aumidKey"
+try {
+    [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree("Software\Classes\AppUserModelId\$aumid", $false)
+    Write-Host "Removed HKCU\Software\Classes\AppUserModelId\$aumid"
+} catch {
+    Write-Warning "Could not remove AUMID key: $($_.Exception.Message)"
 }
 
 if (Test-Path $startMenu) {
