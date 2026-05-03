@@ -58,7 +58,7 @@ if (-not $elevated) {
     } catch {
         Write-VTInstallLog "Self-elevation failed: $($_.Exception.Message)"
         [System.Windows.Forms.MessageBox]::Show(
-            "Install cancelled — elevation was denied or failed:`n$($_.Exception.Message)",
+            "Install cancelled - elevation was denied or failed:`n$($_.Exception.Message)",
             'VTScanner', 'OK', 'Warning') | Out-Null
     }
     return
@@ -66,7 +66,7 @@ if (-not $elevated) {
 
 function Show-VTApiKeyDialog {
     $form = New-Object System.Windows.Forms.Form
-    $form.Text = 'VTScanner — VirusTotal API Key'
+    $form.Text = 'VTScanner - VirusTotal API Key'
     $form.Size = New-Object System.Drawing.Size(520, 230)
     $form.StartPosition = 'CenterScreen'
     $form.FormBorderStyle = 'FixedDialog'
@@ -127,7 +127,7 @@ function Show-VTApiKeyDialog {
                 -Headers @{ 'x-apikey' = $key } -Method Get -ErrorAction Stop
             if ($resp.data.id) {
                 $status.ForeColor = [System.Drawing.Color]::FromArgb(30, 142, 62)
-                $status.Text = "OK — authenticated as $($resp.data.id)."
+                $status.Text = "OK - authenticated as $($resp.data.id)."
             } else {
                 $status.ForeColor = [System.Drawing.Color]::FromArgb(200, 50, 50)
                 $status.Text = 'Unexpected response from VirusTotal.'
@@ -210,7 +210,7 @@ function Set-VTShortcutRunAsAdmin {
 function New-VTStartMenuShortcut {
     $programs = Join-Path ([Environment]::GetFolderPath('CommonPrograms')) 'VTScanner'
     if (-not (Test-Path $programs)) { New-Item -ItemType Directory -Path $programs -Force | Out-Null }
-    $lnk = Join-Path $programs 'VTScanner — Scan Running Process.lnk'
+    $lnk = Join-Path $programs 'VTScanner - Scan Running Process.lnk'
 
     $wsh = New-Object -ComObject WScript.Shell
     $sc = $wsh.CreateShortcut($lnk)
@@ -250,7 +250,7 @@ try {
 
     Write-VTInstallLog 'Install completed successfully'
     [System.Windows.Forms.MessageBox]::Show(
-        "VTScanner installed.`n`nRight-click any file in Explorer and choose 'Scan with VirusTotal',`nor open Start → VTScanner → 'Scan Running Process'.",
+        "VTScanner installed.`n`nRight-click any file in Explorer and choose 'Scan with VirusTotal',`nor open Start -> VTScanner -> 'Scan Running Process'.",
         'VTScanner', 'OK', 'Information') | Out-Null
 } catch {
     Write-VTInstallLog "FATAL: $($_.Exception.GetType().FullName): $($_.Exception.Message)"

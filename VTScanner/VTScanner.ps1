@@ -236,7 +236,7 @@ function Show-VTResultsWindow {
     )
 
     $form              = New-Object System.Windows.Forms.Form
-    $form.Text         = "VTScanner — $(Split-Path -Leaf $FilePath)"
+    $form.Text         = "VTScanner - $(Split-Path -Leaf $FilePath)"
     $form.Size         = New-Object System.Drawing.Size(560, 360)
     $form.StartPosition = 'CenterScreen'
     $form.FormBorderStyle = 'FixedDialog'

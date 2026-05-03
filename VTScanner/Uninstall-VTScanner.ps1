@@ -32,7 +32,7 @@ if (-not (Test-IsElevated)) {
         Start-Process -FilePath 'powershell.exe' -Verb RunAs -Wait -ArgumentList $childArgs
     } catch {
         [System.Windows.Forms.MessageBox]::Show(
-            "Uninstall cancelled — elevation was denied or failed:`n$($_.Exception.Message)",
+            "Uninstall cancelled - elevation was denied or failed:`n$($_.Exception.Message)",
             'VTScanner', 'OK', 'Warning') | Out-Null
     }
     return
