@@ -28,10 +28,16 @@ function Test-IsElevated {
 
 if (-not (Test-IsElevated)) {
     Write-Host 'Re-launching elevated...'
-    Start-Process -FilePath 'powershell.exe' -Verb RunAs -ArgumentList @(
-        '-NoProfile', '-ExecutionPolicy', 'Bypass',
-        '-File', $PSCommandPath
-    )
+    try {
+        Start-Process -FilePath 'powershell.exe' -Verb RunAs -Wait -ArgumentList @(
+            '-NoProfile', '-ExecutionPolicy', 'Bypass',
+            '-File', $PSCommandPath
+        )
+    } catch {
+        [System.Windows.Forms.MessageBox]::Show(
+            "Install cancelled — elevation was denied or failed:`n$($_.Exception.Message)",
+            'VTScanner', 'OK', 'Warning') | Out-Null
+    }
     return
 }
 
