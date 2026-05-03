@@ -10,9 +10,26 @@
 
 [CmdletBinding()] param()
 
-Add-Type -AssemblyName System.Windows.Forms
-Add-Type -AssemblyName System.Drawing
-Add-Type -AssemblyName System.Security
+$VTLogPath = Join-Path $env:PUBLIC 'VTScanner-install.log'
+function Write-VTInstallLog {
+    param([string]$Message)
+    $line = '{0} {1}' -f (Get-Date).ToString('o'), $Message
+    try { Add-Content -LiteralPath $VTLogPath -Value $line -Encoding UTF8 -ErrorAction Stop } catch {}
+}
+Write-VTInstallLog "=== Install-VTScanner.ps1 entered ==="
+Write-VTInstallLog "PSCommandPath=$PSCommandPath"
+Write-VTInstallLog "PSScriptRoot=$PSScriptRoot"
+Write-VTInstallLog "User=$env:USERNAME Domain=$env:USERDOMAIN PSVersion=$($PSVersionTable.PSVersion)"
+
+try {
+    Add-Type -AssemblyName System.Windows.Forms
+    Add-Type -AssemblyName System.Drawing
+    Add-Type -AssemblyName System.Security
+    Write-VTInstallLog 'Loaded WinForms / Drawing / Security assemblies'
+} catch {
+    Write-VTInstallLog "ASSEMBLY LOAD FAILED: $($_.Exception.Message)"
+    throw
+}
 
 $installRoot = Join-Path $env:ProgramFiles 'VTScanner'
 $configDir   = Join-Path $env:ProgramData 'VTScanner'
@@ -26,14 +43,20 @@ function Test-IsElevated {
     return $p.IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
-if (-not (Test-IsElevated)) {
+$elevated = Test-IsElevated
+Write-VTInstallLog "Elevated=$elevated"
+
+if (-not $elevated) {
     Write-Host 'Re-launching elevated...'
+    Write-VTInstallLog 'Self-elevating via Start-Process -Verb RunAs -Wait'
     try {
         Start-Process -FilePath 'powershell.exe' -Verb RunAs -Wait -ArgumentList @(
             '-NoProfile', '-ExecutionPolicy', 'Bypass',
             '-File', $PSCommandPath
         )
+        Write-VTInstallLog 'Elevated child returned'
     } catch {
+        Write-VTInstallLog "Self-elevation failed: $($_.Exception.Message)"
         [System.Windows.Forms.MessageBox]::Show(
             "Install cancelled — elevation was denied or failed:`n$($_.Exception.Message)",
             'VTScanner', 'OK', 'Warning') | Out-Null
@@ -191,42 +214,37 @@ function New-VTStartMenuShortcut {
     Set-VTShortcutRunAsAdmin -LnkPath $lnk
 }
 
-$logPath = Join-Path $env:TEMP 'VTScanner-install.log'
-try { Start-Transcript -Path $logPath -Force | Out-Null } catch {}
-
 try {
-    Write-Host 'Prompting for VirusTotal API key...'
+    Write-VTInstallLog 'Showing API key dialog'
     $apiKey = Show-VTApiKeyDialog
     if (-not $apiKey) {
-        Write-Warning 'Install cancelled (no API key supplied).'
+        Write-VTInstallLog 'No API key supplied; aborting'
         return
     }
 
-    Write-Host "Copying files to $installRoot..."
+    Write-VTInstallLog "Copying files to $installRoot"
     Copy-VTFiles
 
-    Write-Host 'Saving API key (DPAPI, LocalMachine)...'
+    Write-VTInstallLog 'Saving API key (DPAPI LocalMachine)'
     Save-VTApiKey -ApiKey $apiKey
 
-    Write-Host 'Generating icon...'
+    Write-VTInstallLog 'Generating icon'
     Build-VTIcon
 
-    Write-Host 'Registering right-click context menu entry...'
+    Write-VTInstallLog 'Registering HKLM right-click entry via Microsoft.Win32.Registry'
     Register-VTContextMenu
 
-    Write-Host 'Creating Start Menu shortcut for the process picker...'
+    Write-VTInstallLog 'Creating Start Menu shortcut'
     New-VTStartMenuShortcut
 
+    Write-VTInstallLog 'Install completed successfully'
     [System.Windows.Forms.MessageBox]::Show(
         "VTScanner installed.`n`nRight-click any file in Explorer and choose 'Scan with VirusTotal',`nor open Start → VTScanner → 'Scan Running Process'.",
         'VTScanner', 'OK', 'Information') | Out-Null
 } catch {
-    $msg  = $_.Exception.Message
-    $full = $_ | Out-String
-    Write-Host $full
+    Write-VTInstallLog "FATAL: $($_.Exception.GetType().FullName): $($_.Exception.Message)"
+    Write-VTInstallLog ($_ | Out-String)
     [System.Windows.Forms.MessageBox]::Show(
-        "Install failed:`n$msg`n`nFull log: $logPath",
+        "Install failed:`n$($_.Exception.Message)`n`nLog: $VTLogPath",
         'VTScanner', 'OK', 'Error') | Out-Null
-} finally {
-    try { Stop-Transcript | Out-Null } catch {}
 }
