@@ -186,6 +186,17 @@ function Register-VTContextMenu {
     } finally {
         $base.Close()
     }
+
+    $basePsPath = 'HKLM:\SOFTWARE\Classes\*\shell\VTScan'
+    $cmdPsPath  = 'HKLM:\SOFTWARE\Classes\*\shell\VTScan\command'
+    try {
+        Set-Item       -LiteralPath $basePsPath -Value 'Scan with VirusTotal' -Force
+        Set-ItemProperty -LiteralPath $basePsPath -Name 'Icon' -Value $iconPath -Force
+        Set-Item       -LiteralPath $cmdPsPath  -Value $cmd -Force
+        Write-VTInstallLog 'Reapplied default values via Set-Item -LiteralPath'
+    } catch {
+        Write-VTInstallLog "Set-Item reapply failed (non-fatal): $($_.Exception.Message)"
+    }
 }
 
 function Set-VTShortcutRunAsAdmin {
