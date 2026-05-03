@@ -92,12 +92,13 @@ SourceFiles0=$source
 $sourceMappings
 "@
 
-Set-Content -Path $sedPath -Value $sedContent -Encoding ASCII
+$sedContent = $sedContent -replace "`r?`n", "`r`n"
+[System.IO.File]::WriteAllText($sedPath, $sedContent, [System.Text.Encoding]::ASCII)
 
 Write-Host "SED written to $sedPath"
 Write-Host "Building $outputAbs ..."
 
-$proc = Start-Process -FilePath $iexpress -ArgumentList @('/N', "`"$sedPath`"") -Wait -PassThru -NoNewWindow
+$proc = Start-Process -FilePath $iexpress -ArgumentList @('/N', $sedPath) -Wait -PassThru -NoNewWindow
 if ($proc.ExitCode -ne 0) {
     throw "iexpress failed with exit code $($proc.ExitCode). Inspect $sedPath."
 }
