@@ -151,16 +151,18 @@ function Build-VTIcon {
 }
 
 function Register-VTContextMenu {
-    $base = 'HKLM:\SOFTWARE\Classes\*\shell\VTScan'
-    if (-not (Test-Path $base)) { New-Item -Path $base -Force | Out-Null }
-    Set-ItemProperty -Path $base -Name '(default)' -Value 'Scan with VirusTotal'
-    Set-ItemProperty -Path $base -Name 'Icon'      -Value $iconPath
-
-    $cmdKey = Join-Path $base 'command'
-    if (-not (Test-Path $cmdKey)) { New-Item -Path $cmdKey -Force | Out-Null }
     $scanScript = Join-Path $installRoot 'VTScanner.ps1'
     $cmd = "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$scanScript`" -FilePath `"%1`""
-    Set-ItemProperty -Path $cmdKey -Name '(default)' -Value $cmd
+
+    $base = [Microsoft.Win32.Registry]::LocalMachine.CreateSubKey('SOFTWARE\Classes\*\shell\VTScan')
+    try {
+        $base.SetValue('',     'Scan with VirusTotal')
+        $base.SetValue('Icon', $iconPath)
+        $cmdKey = $base.CreateSubKey('command')
+        try { $cmdKey.SetValue('', $cmd) } finally { $cmdKey.Close() }
+    } finally {
+        $base.Close()
+    }
 }
 
 function Set-VTShortcutRunAsAdmin {
@@ -189,6 +191,9 @@ function New-VTStartMenuShortcut {
     Set-VTShortcutRunAsAdmin -LnkPath $lnk
 }
 
+$logPath = Join-Path $env:TEMP 'VTScanner-install.log'
+try { Start-Transcript -Path $logPath -Force | Out-Null } catch {}
+
 try {
     Write-Host 'Prompting for VirusTotal API key...'
     $apiKey = Show-VTApiKeyDialog
@@ -216,8 +221,12 @@ try {
         "VTScanner installed.`n`nRight-click any file in Explorer and choose 'Scan with VirusTotal',`nor open Start → VTScanner → 'Scan Running Process'.",
         'VTScanner', 'OK', 'Information') | Out-Null
 } catch {
+    $msg  = $_.Exception.Message
+    $full = $_ | Out-String
+    Write-Host $full
     [System.Windows.Forms.MessageBox]::Show(
-        "Install failed:`n$($_.Exception.Message)",
+        "Install failed:`n$msg`n`nFull log: $logPath",
         'VTScanner', 'OK', 'Error') | Out-Null
-    throw
+} finally {
+    try { Stop-Transcript | Out-Null } catch {}
 }
